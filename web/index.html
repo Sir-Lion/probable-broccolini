@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Can I afford it?</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#E9EFF3;--ink:#12263A;--mute:#5B6B7A;--card:#fff;--line:#CBD6DE;--good:#1F7A5C;--bad:#B3261E;--buy:#F2B705}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,sans-serif}
+main{max-width:980px;margin:0 auto;padding:24px 16px 64px}
+h1,h2,.verdict{font-family:'Bricolage Grotesque',system-ui,sans-serif}
+h1{font-size:clamp(2rem,6vw,3.2rem);font-weight:800;margin:8px 0 0;letter-spacing:-.02em}
+h2{font-size:1.15rem;margin:0 0 12px}
+header p{color:var(--mute);margin:4px 0 20px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+@media(max-width:760px){.grid{grid-template-columns:1fr}}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:16px}
+.grid .panel{margin:0}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+label{display:flex;flex-direction:column;font-size:.85rem;color:var(--mute);gap:3px}
+input{font:inherit;color:var(--ink);padding:7px 9px;border:1px solid var(--line);border-radius:6px;min-width:0;width:100%}
+input:focus-visible,button:focus-visible{outline:3px solid var(--buy);outline-offset:1px}
+.verdict{font-size:1.7rem;font-weight:800;margin:0 0 4px}
+.verdict.good{color:var(--good)}.verdict.bad{color:var(--bad)}.verdict.tight{color:#8A6500}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.stat span{display:block;font-size:.8rem;color:var(--mute)}
+.stat b{font-size:1.25rem}
+.neg{color:var(--bad)}
+.month{margin-bottom:18px}
+.month h3{margin:0 0 6px;font-size:1rem}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.dow{font-size:.75rem;color:var(--mute);text-align:center}
+.cell{min-height:58px;border:1px solid var(--line);border-radius:6px;padding:3px 4px;font-size:.72rem;background:#F7FAFC;text-align:left;font-family:inherit;color:inherit;cursor:default;overflow:hidden}
+.cell.off{opacity:.35}
+.cell.ev{cursor:pointer;background:#fff}
+.cell.low{background:#FFF3D6}.cell.neg{background:#FBE0DD}
+.cell.buy{box-shadow:inset 0 -4px 0 var(--buy)}
+.cell.sel{outline:2px solid var(--ink)}
+.cell b{display:block;font-size:.8rem}
+.up{color:var(--good)}.dn{color:var(--bad)}
+.legend{font-size:.8rem;color:var(--mute);margin:0 0 12px}
+#detail{border-top:1px solid var(--line);padding-top:10px;min-height:2em}
+#detail p{margin:2px 0}
+.row{display:grid;grid-template-columns:1.4fr 1.1fr .6fr 1.3fr 1.1fr auto;gap:6px;margin-bottom:6px}
+.row.head{font-size:.75rem;color:var(--mute)}
+@media(max-width:760px){.row{grid-template-columns:1fr 1fr}.row.head{display:none}}
+button{font:inherit;border:1px solid var(--ink);background:var(--ink);color:#fff;border-radius:6px;padding:6px 12px;cursor:pointer}
+button.ghost{background:#fff;color:var(--ink)}
+.hint{font-size:.85rem;color:var(--mute);margin:0 0 10px}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>Can I afford it?</h1>
+  <p>Add your pays and bills, then see what an installment buy does to your balance, day by day.</p>
+</header>
+
+<section class="grid">
+  <div class="panel">
+    <h2>Your numbers</h2>
+    <div class="fields" id="fields"></div>
+    <p class="hint" style="margin-top:10px">Set installments to 1 to test paying outright.</p>
+  </div>
+  <div class="panel" id="result"></div>
+</section>
+
+<section class="panel">
+  <h2>Calendar</h2>
+  <p class="legend">Yellow underline = installment. Amber = under $150. Red = below zero. Tap a day for details.</p>
+  <div id="cal"></div>
+  <div id="detail">Pick a day with a number on it.</div>
+</section>
+
+<section class="panel">
+  <h2>Pays and bills</h2>
+  <p class="hint">Money in is positive, money out is negative. "Every" is days between repeats (14 = fortnightly, 0 = one-off). Several amounts, like -150,-170, take turns each time. Dates are YYYY-MM-DD.</p>
+  <div id="items"></div>
+  <button class="ghost" id="add">Add a row</button>
+  <button class="ghost" id="reset">Reset to example</button>
+</section>
+</main>
+
+<script type="module">
+import init, { simulate } from './pkg/budget_core.js';
+
+const DEF = {
+  balance: 439, start: '2026-11-20', horizon: 84,
+  total: 748, count: 4, first: '2026-11-20', rest: '2026-12-08', living: 0,
+  items: [
+    {label:'Pay', first:'2026-11-24', every:14, amounts:'487', until:''},
+    {label:'Rent', first:'2026-11-24', every:14, amounts:'-150,-170', until:''},
+    {label:'Subscriptions', first:'2026-11-24', every:14, amounts:'-32,-40', until:''},
+    {label:'Afterpay (current)', first:'2026-12-08', every:14, amounts:'-143.41', until:'2027-01-06'},
+    {label:'Afterpay (current)', first:'2026-11-24', every:0, amounts:'-154.91', until:''},
+    {label:'Extra pay', first:'2026-11-24', every:0, amounts:'50', until:''},
+    {label:'One-off cost', first:'2026-11-24', every:0, amounts:'-200', until:''},
+    {label:'No rent this time', first:'2026-11-24', every:0, amounts:'150', until:''}
+  ]
+};
+const FIELDS = [
+  ['balance','Balance now ($)','number'],['start','Starting date','date'],
+  ['total','Purchase total ($)','number'],['count','Installments','number'],
+  ['first','First payment','date'],['rest','Second payment','date'],
+  ['living','Food/fuel per week ($)','number'],['horizon','Days to look ahead','number']
+];
+const KEY = 'afford-v1';
+let S;
+try { S = JSON.parse(localStorage.getItem(KEY)) || structuredClone(DEF); } catch { S = structuredClone(DEF); }
+const $ = id => document.getElementById(id);
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch {} };
+const money = n => (n < 0 ? '-' : '') + '$' + Math.abs(n).toFixed(2);
+const sign = n => (n >= 0 ? '+' : '-') + '$' + Math.abs(n).toFixed(0);
+const cls = n => n < 0 ? 'neg' : '';
+let ready = false, out = null;
+
+function buildFields(){
+  $('fields').innerHTML = FIELDS.map(([k,l,t]) =>
+    `<label>${l}<input data-k="${k}" type="${t}" step="any" value="${S[k]}"></label>`).join('');
+}
+function buildItems(){
+  const cols = ['label','first','every','amounts','until'];
+  $('items').innerHTML = '<div class="row head"><span>Name</span><span>First date</span><span>Every</span><span>Amounts</span><span>Until</span><span></span></div>' +
+    S.items.map((it,i) => `<div class="row">` +
+      cols.map(c => `<input data-i="${i}" data-c="${c}" value="${it[c]}" aria-label="${c}">`).join('') +
+      `<button class="ghost" data-del="${i}" aria-label="Remove row">x</button></div>`).join('');
+}
+document.addEventListener('input', e => {
+  const t = e.target;
+  if (t.dataset.k) S[t.dataset.k] = t.type === 'number' ? t.valueAsNumber : t.value;
+  else if (t.dataset.c) S.items[+t.dataset.i][t.dataset.c] = t.dataset.c === 'every' ? (+t.value || 0) : t.value;
+  else return;
+  save(); run();
+});
+$('items').addEventListener('click', e => {
+  if (e.target.dataset.del !== undefined) { S.items.splice(+e.target.dataset.del, 1); save(); buildItems(); run(); }
+});
+$('add').onclick = () => { S.items.push({label:'New',first:S.start,every:14,amounts:'0',until:''}); save(); buildItems(); };
+$('reset').onclick = () => { S = structuredClone(DEF); save(); buildFields(); buildItems(); run(); };
+
+function run(){
+  if (!ready) return;
+  const items = S.items.filter(i => i.first && String(i.amounts).trim()).map(i => ({
+    label: i.label || 'Item', first: i.first, every: +i.every || 0,
+    amounts: String(i.amounts).split(',').map(Number).filter(n => !isNaN(n)),
+    until: i.until || null, count: null
+  }));
+  if (+S.living > 0) items.push({label:'Food/fuel', first:S.start, every:7, amounts:[-S.living], until:null, count:null});
+  const input = {
+    start_balance: +S.balance || 0, start: S.start, horizon: +S.horizon || 84, items,
+    purchase: +S.total > 0 ? {label:'New purchase', total:+S.total, count:Math.max(1,Math.floor(+S.count)||1), first:S.first, rest:S.rest, every:14} : null
+  };
+  out = JSON.parse(simulate(JSON.stringify(input)));
+  if (out.error) { $('result').innerHTML = `<h2>Check your inputs</h2><p>${out.error}</p>`; return; }
+  showResult(); showCal();
+}
+
+function showResult(){
+  const w = out.with, wo = out.without;
+  const weeks = Math.max(1, (w.days.length - 1) / 7);
+  let v = 'Works', c = 'good';
+  if (w.min < 0) { v = 'Goes negative'; c = 'bad'; }
+  else if (w.min < 150) { v = 'Works, but tight'; c = 'tight'; }
+  const line = w.min < 0 ? `You'd drop below zero on ${w.min_date}.` : `Lowest point is ${money(w.min)} on ${w.min_date}.`;
+  $('result').innerHTML = `<h2>Result</h2><p class="verdict ${c}">${v}</p><p>${line}</p>
+    <div class="stats">
+      <div class="stat"><span>Balance at the end</span><b class="${cls(w.end)}">${money(w.end)}</b></div>
+      <div class="stat"><span>Without the purchase</span><b>${money(wo.end)}</b></div>
+      <div class="stat"><span>Lowest point</span><b class="${cls(w.min)}">${money(w.min)}</b></div>
+      <div class="stat"><span>Spare per week by the end</span><b class="${cls(w.end)}">${money(w.end / weeks)}</b></div>
+    </div>`;
+}
+
+function showCal(){
+  const map = {}; out.with.days.forEach(d => map[d.date] = d);
+  const first = out.with.days[0].date, last = out.with.days.at(-1).date;
+  let [y, m] = first.split('-').map(Number);
+  const [ly, lm] = last.split('-').map(Number);
+  let html = '';
+  while (y < ly || (y === ly && m <= lm)) {
+    const dim = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const off = (new Date(Date.UTC(y, m - 1, 1)).getUTCDay() + 6) % 7;
+    const name = new Date(Date.UTC(y, m - 1, 1)).toLocaleString('en-AU', {month:'long', year:'numeric', timeZone:'UTC'});
+    html += `<div class="month"><h3>${name}</h3><div class="cal">` +
+      ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d => `<div class="dow">${d}</div>`).join('') +
+      '<div></div>'.repeat(off);
+    for (let d = 1; d <= dim; d++) {
+      const key = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const day = map[key];
+      if (!day) { html += `<div class="cell off"><b>${d}</b></div>`; continue; }
+      const ev = day.items.length > 0;
+      const k = ['cell', ev ? 'ev' : '', day.balance < 0 ? 'neg' : day.balance < 150 ? 'low' : '',
+        day.items.some(i => i.label === 'New purchase') ? 'buy' : ''].join(' ');
+      html += `<button class="${k}" data-date="${key}"><b>${d}</b>` +
+        (ev ? `<span class="${day.net >= 0 ? 'up' : 'dn'}">${sign(day.net)}</span><br>$${Math.round(day.balance)}` : '') + `</button>`;
+    }
+    html += '</div></div>';
+    if (++m > 12) { m = 1; y++; }
+  }
+  $('cal').innerHTML = html;
+  $('cal').onclick = e => {
+    const b = e.target.closest('[data-date]'); if (!b) return;
+    document.querySelectorAll('.cell.sel').forEach(x => x.classList.remove('sel'));
+    b.classList.add('sel');
+    const day = map[b.dataset.date];
+    $('detail').innerHTML = `<p><b>${b.dataset.date}</b></p>` +
+      (day.items.length ? day.items.map(i => `<p>${i.label}: <span class="${i.amount >= 0 ? 'up' : 'dn'}">${money(i.amount)}</span></p>`).join('') : '<p>Nothing happens this day.</p>') +
+      `<p>Balance after: <b class="${cls(day.balance)}">${money(day.balance)}</b></p>`;
+  };
+}
+
+buildFields(); buildItems();
+init().then(() => { ready = true; run(); })
+  .catch(() => { $('result').innerHTML = '<h2>Could not load</h2><p>Run it through a web server (or GitHub Pages). WebAssembly will not load from a file:// address.</p>'; });
+</script>
+</body>
+</html>
